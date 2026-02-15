@@ -355,6 +355,7 @@ diesel::table! {
         next_retry_at -> Nullable<Text>,
         last_error -> Nullable<Text>,
         last_error_code -> Nullable<Text>,
+        device_id -> Nullable<Text>,
         created_at -> Text,
     }
 }

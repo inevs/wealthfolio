@@ -140,6 +140,7 @@ pub struct SyncOutboxEventDB {
     pub next_retry_at: Option<String>,
     pub last_error: Option<String>,
     pub last_error_code: Option<String>,
+    pub device_id: Option<String>,
     pub created_at: String,
 }
 

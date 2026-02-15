@@ -5,7 +5,6 @@
 use log::debug;
 use rand::Rng;
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_LENGTH, CONTENT_TYPE};
-use sha2::{Digest, Sha256};
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::OnceLock;
@@ -31,8 +30,7 @@ fn snapshot_upload_in_flight() -> &'static Mutex<HashSet<String>> {
 }
 
 fn compute_sha256_checksum(payload: &[u8]) -> String {
-    let digest = Sha256::digest(payload);
-    format!("sha256:{:x}", digest)
+    crate::crypto::sha256_checksum(payload)
 }
 
 fn is_valid_sha256_checksum(checksum: &str) -> bool {

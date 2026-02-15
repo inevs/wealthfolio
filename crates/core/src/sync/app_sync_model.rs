@@ -34,12 +34,8 @@ pub enum SyncEntity {
     AiThreadTag,
     ContributionLimit,
     Platform,
-    Settings,
     Snapshot,
 }
-
-/// Explicit alias to distinguish device replication vocabulary from broker ingest code.
-pub type DeviceSyncEntity = SyncEntity;
 
 /// Supported sync operations.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -50,9 +46,6 @@ pub enum SyncOperation {
     Delete,
     Request,
 }
-
-/// Explicit alias to distinguish device replication vocabulary from broker ingest code.
-pub type DeviceSyncOperation = SyncOperation;
 
 /// Local outbox lifecycle status.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]

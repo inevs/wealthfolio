@@ -1,7 +1,7 @@
 //! Core scheduler constants/helpers for device sync.
 
 /// Foreground pull cadence in seconds.
-pub const DEVICE_SYNC_FOREGROUND_INTERVAL_SECS: u64 = 30;
+pub const DEVICE_SYNC_FOREGROUND_INTERVAL_SECS: u64 = 45;
 
 /// Maximum jitter (seconds) added to periodic cycle intervals.
 pub const DEVICE_SYNC_INTERVAL_JITTER_SECS: u64 = 5;

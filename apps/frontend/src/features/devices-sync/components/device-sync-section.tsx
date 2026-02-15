@@ -41,12 +41,18 @@ import {
   DropdownMenuTrigger,
 } from "@wealthfolio/ui/components/ui/dropdown-menu";
 import { Icons, Skeleton } from "@wealthfolio/ui";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@wealthfolio/ui/components/ui/tooltip";
 import { useDeviceSync } from "../providers/device-sync-provider";
 import { useDevices, useRenameDevice, useRevokeDevice } from "../hooks";
 import { E2EESetupCard } from "./e2ee-setup-card";
 import { RecoveryDialog } from "./recovery-dialog";
 import { PairingFlow } from "./pairing-flow";
-import { SyncStates, type Device } from "../types";
+import { SyncStates, type Device, type SyncState } from "../types";
 
 const PORTAL_DEVICES_URL = "https://connect.wealthfolio.app/settings/devices";
 
@@ -255,6 +261,7 @@ export function DeviceSyncSection() {
                 <Icons.Smartphone className="text-muted-foreground h-4 w-4" />
               </div>
               <h3 className="text-base font-semibold">Connected Devices</h3>
+              <SyncStatusDot engineStatus={state.engineStatus} />
             </div>
             {/* Mobile: icon only */}
             <Button
@@ -289,18 +296,6 @@ export function DeviceSyncSection() {
               <div className="bg-destructive/10 text-destructive mb-3 flex items-center gap-2 rounded-md px-3 py-2 text-xs">
                 <Icons.AlertCircle className="h-3.5 w-3.5" />
                 {state.bootstrapMessage}
-              </div>
-            )}
-            {state.bootstrapStatus === "success" && state.bootstrapMessage && (
-              <div className="bg-muted/40 text-muted-foreground mb-3 rounded-md px-3 py-2 text-xs">
-                {state.bootstrapMessage}
-              </div>
-            )}
-            {state.engineStatus && (
-              <div className="text-muted-foreground mb-3 rounded-md border px-3 py-2 text-xs">
-                Engine: {state.engineStatus.backgroundRunning ? "running" : "idle"} • Cycle:{" "}
-                {state.engineStatus.lastCycleStatus ?? "n/a"} • Cursor:{" "}
-                {state.engineStatus.cursor}
               </div>
             )}
             {!state.device ? (
@@ -515,6 +510,42 @@ function ConnectedDevicesList({
         </Button>
       </div>
     </div>
+  );
+}
+
+function SyncStatusDot({ engineStatus }: { engineStatus: SyncState["engineStatus"] }) {
+  if (!engineStatus) return null;
+
+  const { backgroundRunning, lastCycleStatus, lastError, consecutiveFailures } = engineStatus;
+
+  let color: string;
+  let label: string;
+
+  if (lastError || consecutiveFailures > 2) {
+    color = "bg-red-500";
+    label = "Sync error";
+  } else if (!backgroundRunning) {
+    color = "bg-gray-400";
+    label = "Sync paused";
+  } else if (lastCycleStatus === "ok") {
+    color = "bg-green-500";
+    label = "Synced";
+  } else {
+    color = "bg-yellow-500";
+    label = "Syncing";
+  }
+
+  return (
+    <TooltipProvider delayDuration={300}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className={`inline-block h-2 w-2 shrink-0 rounded-full ${color}`} />
+        </TooltipTrigger>
+        <TooltipContent side="right" className="text-xs">
+          {label}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }
 

@@ -170,7 +170,7 @@ fn entity_storage_mapping(entity: &SyncEntity) -> Option<(&'static str, &'static
         SyncEntity::AiThreadTag => Some(("ai_thread_tags", "id")),
         SyncEntity::ContributionLimit => Some(("contribution_limits", "id")),
         SyncEntity::Platform => Some(("platforms", "id")),
-        SyncEntity::Settings | SyncEntity::Snapshot => None,
+        SyncEntity::Snapshot => None,
     }
 }
 
@@ -242,6 +242,15 @@ fn resolve_payload_key_version(conn: &mut SqliteConnection, requested_version: i
     Ok(maybe_row.and_then(|row| row.key_version).unwrap_or(1).max(1))
 }
 
+fn resolve_local_device_id(conn: &mut SqliteConnection) -> Option<String> {
+    sync_device_config::table
+        .filter(sync_device_config::trust_state.eq("trusted"))
+        .select(sync_device_config::device_id)
+        .first::<String>(conn)
+        .optional()
+        .unwrap_or(None)
+}
+
 pub fn write_outbox_event(
     conn: &mut SqliteConnection,
     request: OutboxWriteRequest,
@@ -253,6 +262,7 @@ pub fn write_outbox_event(
     let now = Utc::now().to_rfc3339();
 
     let payload_key_version = resolve_payload_key_version(conn, request.payload_key_version)?;
+    let device_id = resolve_local_device_id(conn);
     let row = SyncOutboxEventDB {
         event_id: event_id.clone(),
         entity: enum_to_db(&request.entity)?,
@@ -267,6 +277,7 @@ pub fn write_outbox_event(
         next_retry_at: None,
         last_error: None,
         last_error_code: None,
+        device_id,
         created_at: now,
     };
 
@@ -788,22 +799,34 @@ impl AppSyncRepository {
 
         self.writer
             .exec(move |conn| {
-                let mut applied = 0usize;
-                for (entity, entity_id, op, event_id, client_timestamp, seq, payload) in events {
-                    if apply_remote_event_lww_tx(
-                        conn,
-                        entity,
-                        entity_id,
-                        op,
-                        event_id,
-                        client_timestamp,
-                        seq,
-                        payload,
-                    )? {
-                        applied += 1;
+                // Disable FK checks during batch replay — events may arrive
+                // out of dependency order (e.g. activity before its account).
+                diesel::sql_query("PRAGMA foreign_keys = OFF")
+                    .execute(conn)
+                    .map_err(StorageError::from)?;
+
+                let result = (|| -> Result<usize> {
+                    let mut applied = 0usize;
+                    for (entity, entity_id, op, event_id, client_timestamp, seq, payload) in events
+                    {
+                        if apply_remote_event_lww_tx(
+                            conn,
+                            entity,
+                            entity_id,
+                            op,
+                            event_id,
+                            client_timestamp,
+                            seq,
+                            payload,
+                        )? {
+                            applied += 1;
+                        }
                     }
-                }
-                Ok(applied)
+                    Ok(applied)
+                })();
+
+                let _ = diesel::sql_query("PRAGMA foreign_keys = ON").execute(conn);
+                result
             })
             .await
     }
@@ -839,6 +862,18 @@ impl AppSyncRepository {
                 Ok(next_lock_version)
             })
             .await
+    }
+
+    pub fn verify_cycle_lock(&self, expected_version: i64) -> Result<bool> {
+        let mut conn = get_connection(&self.pool)?;
+        let state = sync_engine_state::table
+            .find(1)
+            .first::<SyncEngineStateDB>(&mut conn)
+            .optional()
+            .map_err(StorageError::from)?;
+        Ok(state
+            .map(|s| s.lock_version == expected_version)
+            .unwrap_or(false))
     }
 
     pub async fn mark_push_completed(&self) -> Result<()> {
@@ -1679,6 +1714,52 @@ mod tests {
         assert!(
             payload.starts_with(b"SQLite format 3\0"),
             "expected exported payload to be sqlite image"
+        );
+    }
+
+    #[test]
+    fn quote_identifier_escapes_backticks() {
+        assert_eq!(quote_identifier("col`name"), "`col``name`");
+    }
+
+    #[test]
+    fn escape_sqlite_str_escapes_single_quotes() {
+        assert_eq!(escape_sqlite_str("O'Brien"), "O''Brien");
+    }
+
+    #[test]
+    fn json_value_to_sql_literal_handles_injection_attempt() {
+        let malicious = serde_json::Value::String("'; DROP TABLE accounts; --".to_string());
+        let sql = json_value_to_sql_literal(&malicious);
+        assert_eq!(sql, "'''; DROP TABLE accounts; --'");
+    }
+
+    #[tokio::test]
+    async fn replay_rejects_unknown_columns() {
+        let (pool, writer) = setup_db();
+        let repo = AppSyncRepository::new(pool, writer);
+
+        let result = repo
+            .apply_remote_event_lww(
+                SyncEntity::Account,
+                "acc-unknown-col".to_string(),
+                SyncOperation::Create,
+                "evt-unk-col".to_string(),
+                "2026-02-15T00:00:00Z".to_string(),
+                1,
+                serde_json::json!({
+                    "id": "acc-unknown-col",
+                    "nonexistent_column": "value"
+                }),
+            )
+            .await;
+
+        assert!(result.is_err(), "expected unknown column to be rejected");
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("nonexistent_column"),
+            "error should mention the bad column: {}",
+            err_msg
         );
     }
 }

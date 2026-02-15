@@ -22,6 +22,7 @@ CREATE TABLE sync_outbox (
     next_retry_at TEXT,
     last_error TEXT,
     last_error_code TEXT,
+    device_id TEXT,
     created_at TEXT NOT NULL
 );
 

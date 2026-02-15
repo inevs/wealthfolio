@@ -3,6 +3,9 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+// Re-export the canonical SyncEntity from core to avoid duplication.
+pub use wealthfolio_core::sync::SyncEntity;
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Common Response Types
 // ─────────────────────────────────────────────────────────────────────────────
@@ -479,29 +482,6 @@ pub struct ConfirmPairingResponse {
 // ─────────────────────────────────────────────────────────────────────────────
 // Sync Events + Snapshots
 // ─────────────────────────────────────────────────────────────────────────────
-
-/// Entity names used by sync events.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
-#[serde(rename_all = "snake_case")]
-pub enum SyncEntity {
-    Account,
-    Asset,
-    AssetTaxonomyAssignment,
-    Activity,
-    ActivityImportProfile,
-    Goal,
-    GoalsAllocation,
-    AiThread,
-    AiMessage,
-    AiThreadTag,
-    ContributionLimit,
-    Platform,
-    Settings,
-    Snapshot,
-}
-
-/// Explicit alias to distinguish device replication vocabulary from broker ingest code.
-pub type DeviceSyncEntity = SyncEntity;
 
 /// Event payload pushed to the remote oplog.
 #[derive(Debug, Clone, Serialize, Deserialize)]

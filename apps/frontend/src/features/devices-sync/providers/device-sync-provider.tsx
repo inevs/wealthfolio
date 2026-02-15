@@ -407,8 +407,9 @@ export function DeviceSyncProvider({ children }: { children: ReactNode }) {
       await refreshState();
       return result;
     } catch (err) {
-      dispatch({ type: "OPERATION_END" });
       throw SyncError.from(err);
+    } finally {
+      dispatch({ type: "OPERATION_END" });
     }
   }, [refreshState]);
 
@@ -420,8 +421,9 @@ export function DeviceSyncProvider({ children }: { children: ReactNode }) {
       await refreshState();
       return result;
     } catch (err) {
-      dispatch({ type: "OPERATION_END" });
       throw SyncError.from(err);
+    } finally {
+      dispatch({ type: "OPERATION_END" });
     }
   }, [refreshState]);
 
@@ -525,8 +527,9 @@ export function DeviceSyncProvider({ children }: { children: ReactNode }) {
       await syncService.handleRecovery();
       await refreshState();
     } catch (err) {
-      dispatch({ type: "OPERATION_END" });
       throw SyncError.from(err);
+    } finally {
+      dispatch({ type: "OPERATION_END" });
     }
   }, [refreshState]);
 
@@ -545,8 +548,9 @@ export function DeviceSyncProvider({ children }: { children: ReactNode }) {
       await syncService.clearSyncData();
       dispatch({ type: "RESET" });
     } catch (err) {
-      dispatch({ type: "OPERATION_END" });
       throw SyncError.from(err);
+    } finally {
+      dispatch({ type: "OPERATION_END" });
     }
   }, []);
 
@@ -556,8 +560,9 @@ export function DeviceSyncProvider({ children }: { children: ReactNode }) {
       await syncService.reinitializeSync();
       await refreshState();
     } catch (err) {
-      dispatch({ type: "OPERATION_END" });
       throw SyncError.from(err);
+    } finally {
+      dispatch({ type: "OPERATION_END" });
     }
   }, [refreshState]);
 
