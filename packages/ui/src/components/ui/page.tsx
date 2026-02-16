@@ -1,8 +1,8 @@
 import * as React from "react";
 
+import { cn } from "../../lib/utils";
 import { Button } from "./button";
 import { Icons } from "./icons";
-import { cn } from "../../lib/utils";
 
 interface PageContextValue {
   scrollY: number;
@@ -192,6 +192,7 @@ export function PageContent({
   return (
     <div
       data-ptr-content
+      data-page-content="true"
       className={cn(
         withPadding && "px-2 py-2 md:px-4 md:py-2",
         // In containerMode, the scroll container handles bottom padding for mobile nav
