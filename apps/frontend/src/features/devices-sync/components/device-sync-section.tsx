@@ -72,6 +72,7 @@ export function DeviceSyncSection() {
   const queryClient = useQueryClient();
   const [isPairingOpen, setIsPairingOpen] = useState(false);
   const [showRecoveryDialog, setShowRecoveryDialog] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const handlePairingComplete = useCallback(() => {
     setIsPairingOpen(false);
@@ -88,6 +89,13 @@ export function DeviceSyncSection() {
     queryClient.invalidateQueries({ queryKey: ["sync", "device", "current"] });
     actions.refreshState();
   }, [queryClient, actions]);
+
+  const handleRefreshDevices = useCallback(() => {
+    setIsRefreshing(true);
+    queryClient.invalidateQueries({ queryKey: ["sync", "devices"] });
+    // Brief spinner feedback; content area shows its own loading state
+    setTimeout(() => setIsRefreshing(false), 600);
+  }, [queryClient]);
 
   // Show recovery dialog when in RECOVERY state
   const isRecovery = state.syncState === SyncStates.RECOVERY;
@@ -263,25 +271,36 @@ export function DeviceSyncSection() {
               <h3 className="text-base font-semibold">Connected Devices</h3>
               <SyncStatusDot engineStatus={state.engineStatus} />
             </div>
-            {/* Mobile: icon only */}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="text-muted-foreground hover:text-foreground sm:hidden"
-              onClick={() => window.open(PORTAL_DEVICES_URL, "_blank")}
-            >
-              <Icons.ExternalLink className="h-4 w-4" />
-            </Button>
-            {/* Desktop: full text */}
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-muted-foreground hover:text-foreground hidden sm:inline-flex"
-              onClick={() => window.open(PORTAL_DEVICES_URL, "_blank")}
-            >
-              Manage devices
-              <Icons.ArrowRight className="ml-1 h-3.5 w-3.5" />
-            </Button>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-muted-foreground hover:text-foreground h-8 w-8"
+                onClick={handleRefreshDevices}
+                disabled={isRefreshing}
+              >
+                <Icons.RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
+              </Button>
+              {/* Mobile: icon only */}
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-muted-foreground hover:text-foreground sm:hidden"
+                onClick={() => window.open(PORTAL_DEVICES_URL, "_blank")}
+              >
+                <Icons.ExternalLink className="h-4 w-4" />
+              </Button>
+              {/* Desktop: full text */}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground hover:text-foreground hidden sm:inline-flex"
+                onClick={() => window.open(PORTAL_DEVICES_URL, "_blank")}
+              >
+                Manage devices
+                <Icons.ArrowRight className="ml-1 h-3.5 w-3.5" />
+              </Button>
+            </div>
           </div>
 
           {/* Content */}
