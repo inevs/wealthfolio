@@ -14,7 +14,6 @@ use tauri::{AppHandle, State};
 
 use crate::context::ServiceContext;
 use crate::secret_store::KeyringSecretStore;
-use wealthfolio_connect::DEFAULT_CLOUD_API_URL;
 use wealthfolio_core::secrets::SecretStore;
 use wealthfolio_core::sync::{SyncEntity, SyncOperation, APP_SYNC_TABLES};
 use wealthfolio_device_sync::{
@@ -36,12 +35,14 @@ pub use engine::{ensure_background_engine_started, ensure_background_engine_stop
 
 const CLOUD_ACCESS_TOKEN_KEY: &str = "sync_access_token";
 
-fn cloud_api_base_url() -> String {
+fn cloud_api_base_url() -> Result<String, String> {
     std::env::var("CONNECT_API_URL")
         .ok()
         .map(|v| v.trim().trim_end_matches('/').to_string())
         .filter(|v| !v.is_empty())
-        .unwrap_or_else(|| DEFAULT_CLOUD_API_URL.to_string())
+        .ok_or_else(|| {
+            "CONNECT_API_URL not configured. Connect API operations are disabled.".to_string()
+        })
 }
 
 fn get_access_token() -> Result<String, String> {
@@ -121,8 +122,8 @@ async fn persist_device_config_from_identity(
     }
 }
 
-fn create_client() -> DeviceSyncClient {
-    DeviceSyncClient::new(&cloud_api_base_url())
+fn create_client() -> Result<DeviceSyncClient, String> {
+    Ok(DeviceSyncClient::new(&cloud_api_base_url()?))
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -190,26 +191,6 @@ fn is_sqlite_image(bytes: &[u8]) -> bool {
 
 fn sha256_checksum(bytes: &[u8]) -> String {
     wealthfolio_device_sync::crypto::sha256_checksum(bytes)
-}
-
-fn remote_supports_entity(entity: &SyncEntity) -> bool {
-    matches!(
-        entity,
-        SyncEntity::Account
-            | SyncEntity::Asset
-            | SyncEntity::Activity
-            | SyncEntity::ActivityImportProfile
-            | SyncEntity::Goal
-            | SyncEntity::ContributionLimit
-    )
-}
-
-fn allow_unsupported_entity_sync() -> bool {
-    let parse_flag = |value: String| value.eq_ignore_ascii_case("true") || value == "1";
-    std::env::var("WF_DEVICE_SYNC_ENABLE_UNSUPPORTED_ENTITIES")
-        .map(parse_flag)
-        .or_else(|_| std::env::var("WF_SYNC_ENABLE_UNSUPPORTED_ENTITIES").map(parse_flag))
-        .unwrap_or(false)
 }
 
 fn sync_entity_name(entity: &SyncEntity) -> &'static str {
@@ -468,7 +449,7 @@ pub async fn enroll_device(
     info!("[DeviceSync] Enrolling device: {}", display_name);
 
     let token = get_access_token()?;
-    let client = create_client();
+    let client = create_client()?;
 
     let platform = DevicePlatform::detect().to_string();
     let os_version = get_os_version();
@@ -520,7 +501,7 @@ pub async fn get_device(
         .or_else(get_device_id_from_store)
         .ok_or_else(|| "No device ID configured".to_string())?;
 
-    create_client()
+    create_client()?
         .get_device(&token, &device_id)
         .await
         .map_err(|e| e.to_string())
@@ -535,7 +516,7 @@ pub async fn list_devices(
 
     let token = get_access_token()?;
 
-    let devices = create_client()
+    let devices = create_client()?
         .list_devices(&token, scope.as_deref())
         .await
         .map_err(|e| e.to_string())?;
@@ -557,7 +538,7 @@ pub async fn update_device(
 
     let token = get_access_token()?;
 
-    create_client()
+    create_client()?
         .update_device(
             &token,
             &device_id,
@@ -579,7 +560,7 @@ pub async fn delete_device(
 
     let token = get_access_token()?;
 
-    create_client()
+    create_client()?
         .delete_device(&token, &device_id)
         .await
         .map_err(|e| e.to_string())
@@ -594,7 +575,7 @@ pub async fn revoke_device(
 
     let token = get_access_token()?;
 
-    create_client()
+    create_client()?
         .revoke_device(&token, &device_id)
         .await
         .map_err(|e| e.to_string())
@@ -614,7 +595,7 @@ pub async fn initialize_team_keys(
     let device_id =
         get_device_id_from_store().ok_or_else(|| "No device ID configured".to_string())?;
 
-    let result = create_client()
+    let result = create_client()?
         .initialize_team_keys(&token, &device_id)
         .await
         .map_err(|e| e.to_string())?;
@@ -655,7 +636,7 @@ pub async fn commit_initialize_team_keys(
         recovery_envelope,
     };
 
-    create_client()
+    create_client()?
         .commit_initialize_team_keys(&token, request)
         .await
         .map_err(|e| e.to_string())
@@ -671,7 +652,7 @@ pub async fn rotate_team_keys(
     let device_id =
         get_device_id_from_store().ok_or_else(|| "No device ID configured".to_string())?;
 
-    create_client()
+    create_client()?
         .rotate_team_keys(&token, &device_id)
         .await
         .map_err(|e| e.to_string())
@@ -688,7 +669,7 @@ pub async fn commit_rotate_team_keys(
     let device_id =
         get_device_id_from_store().ok_or_else(|| "No device ID configured".to_string())?;
 
-    create_client()
+    create_client()?
         .commit_rotate_team_keys(&token, &device_id, request)
         .await
         .map_err(|e| e.to_string())
@@ -703,7 +684,7 @@ pub async fn reset_team_sync(
 
     let token = get_access_token()?;
 
-    create_client()
+    create_client()?
         .reset_team_sync(&token, reason.as_deref())
         .await
         .map_err(|e| e.to_string())
@@ -844,7 +825,7 @@ pub async fn create_pairing(
     let device_id =
         get_device_id_from_store().ok_or_else(|| "No device ID configured".to_string())?;
 
-    create_client()
+    create_client()?
         .create_pairing(
             &token,
             &device_id,
@@ -868,7 +849,7 @@ pub async fn get_pairing(
     let device_id =
         get_device_id_from_store().ok_or_else(|| "No device ID configured".to_string())?;
 
-    create_client()
+    create_client()?
         .get_pairing(&token, &device_id, &pairing_id)
         .await
         .map_err(|e| e.to_string())
@@ -885,7 +866,7 @@ pub async fn approve_pairing(
     let device_id =
         get_device_id_from_store().ok_or_else(|| "No device ID configured".to_string())?;
 
-    create_client()
+    create_client()?
         .approve_pairing(&token, &device_id, &pairing_id)
         .await
         .map_err(|e| e.to_string())
@@ -907,7 +888,7 @@ pub async fn complete_pairing(
     let device_id =
         get_device_id_from_store().ok_or_else(|| "No device ID configured".to_string())?;
 
-    let result = create_client()
+    let result = create_client()?
         .complete_pairing(
             &token,
             &device_id,
@@ -954,7 +935,7 @@ pub async fn cancel_pairing(
     let device_id =
         get_device_id_from_store().ok_or_else(|| "No device ID configured".to_string())?;
 
-    create_client()
+    create_client()?
         .cancel_pairing(&token, &device_id, &pairing_id)
         .await
         .map_err(|e| e.to_string())
@@ -976,7 +957,7 @@ pub async fn claim_pairing(
     let device_id =
         get_device_id_from_store().ok_or_else(|| "No device ID configured".to_string())?;
 
-    create_client()
+    create_client()?
         .claim_pairing(
             &token,
             &device_id,
@@ -1000,7 +981,7 @@ pub async fn get_pairing_messages(
     let device_id =
         get_device_id_from_store().ok_or_else(|| "No device ID configured".to_string())?;
 
-    create_client()
+    create_client()?
         .get_pairing_messages(&token, &device_id, &pairing_id)
         .await
         .map_err(|e| e.to_string())
@@ -1018,7 +999,7 @@ pub async fn confirm_pairing(
     let device_id =
         get_device_id_from_store().ok_or_else(|| "No device ID configured".to_string())?;
 
-    create_client()
+    create_client()?
         .confirm_pairing(
             &token,
             &device_id,

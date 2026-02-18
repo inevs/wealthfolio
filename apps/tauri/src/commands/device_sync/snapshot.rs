@@ -132,7 +132,7 @@ pub async fn sync_bootstrap_snapshot_if_needed(
         });
     }
 
-    let client = create_client();
+    let client = create_client()?;
     debug!(
         "[DeviceSync] Requesting latest snapshot metadata for device {}",
         device_id
@@ -311,7 +311,7 @@ pub async fn generate_snapshot_now_internal(
     let key_version = identity.key_version.unwrap_or(1).max(1);
     let token = get_access_token()?;
 
-    let sync_state = create_client()
+    let sync_state = create_client()?
         .get_device(&token, &device_id)
         .await
         .map_err(|e| e.to_string())?;
@@ -398,7 +398,7 @@ pub async fn generate_snapshot_now_internal(
     );
 
     let runtime = context.device_sync_runtime();
-    let upload_result = create_client()
+    let upload_result = create_client()?
         .upload_snapshot_with_cancel_flag(
             &token,
             &device_id,

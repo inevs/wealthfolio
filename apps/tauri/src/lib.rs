@@ -97,15 +97,18 @@ mod desktop {
         });
 
         // Start background device sync engine (self-skips when device is not READY).
-        let device_sync_context = Arc::clone(&context);
-        tauri::async_runtime::spawn(async move {
-            if let Err(err) =
-                crate::commands::device_sync::ensure_background_engine_started(device_sync_context)
-                    .await
-            {
-                log::warn!("Failed to start background device sync engine: {}", err);
-            }
-        });
+        if crate::services::is_connect_configured() {
+            let device_sync_context = Arc::clone(&context);
+            tauri::async_runtime::spawn(async move {
+                if let Err(err) = crate::commands::device_sync::ensure_background_engine_started(
+                    device_sync_context,
+                )
+                .await
+                {
+                    log::warn!("Failed to start background device sync engine: {}", err);
+                }
+            });
+        }
 
         Ok(())
     }

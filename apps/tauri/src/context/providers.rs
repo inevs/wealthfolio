@@ -6,7 +6,7 @@ use crate::services::ConnectService;
 use std::sync::{Arc, RwLock};
 use tokio::sync::mpsc;
 use wealthfolio_ai::{AiProviderService, ChatConfig, ChatService};
-use wealthfolio_connect::{BrokerSyncService, PlatformRepository, DEFAULT_CLOUD_API_URL};
+use wealthfolio_connect::{BrokerSyncService, PlatformRepository};
 use wealthfolio_core::{
     accounts::AccountService,
     activities::ActivityService,
@@ -284,7 +284,7 @@ pub async fn initialize_context(
         .ok()
         .map(|v| v.trim().trim_end_matches('/').to_string())
         .filter(|v| !v.is_empty())
-        .unwrap_or_else(|| DEFAULT_CLOUD_API_URL.to_string());
+        .unwrap_or_default();
     let device_display_name = get_device_display_name();
     let app_version = Some(env!("CARGO_PKG_VERSION").to_string());
     let device_enroll_service = Arc::new(DeviceEnrollService::new(

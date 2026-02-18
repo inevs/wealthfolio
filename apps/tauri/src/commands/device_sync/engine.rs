@@ -12,10 +12,10 @@ use wealthfolio_core::sync::{
 use wealthfolio_device_sync::{ApiRetryClass, SyncPushEventRequest, SyncPushRequest, SyncState};
 
 use super::{
-    allow_unsupported_entity_sync, create_client, decrypt_sync_payload, encrypt_sync_payload,
-    get_access_token, get_sync_identity_from_store, millis_until_rfc3339, parse_event_operation,
-    persist_device_config_from_identity, remote_supports_entity, retry_class_code,
-    sync_entity_name, sync_operation_name, SyncCycleResult,
+    create_client, decrypt_sync_payload, encrypt_sync_payload, get_access_token,
+    get_sync_identity_from_store, millis_until_rfc3339, parse_event_operation,
+    persist_device_config_from_identity, retry_class_code, sync_entity_name,
+    sync_operation_name, SyncCycleResult,
 };
 
 use super::snapshot::maybe_generate_snapshot_for_policy;
@@ -160,7 +160,7 @@ pub(super) async fn run_sync_cycle(
     ctx.local_cursor = sync_repo.get_cursor().map_err(|e| e.to_string())?;
     let lock_version = ctx.lock_version;
     let mut local_cursor = ctx.local_cursor;
-    let client = create_client();
+    let client = create_client()?;
 
     let cursor_response = match client.get_events_cursor(&token, &device_id).await {
         Ok(response) => response,
@@ -192,18 +192,11 @@ pub(super) async fn run_sync_cycle(
     let pending = sync_repo
         .list_pending_outbox(500)
         .map_err(|e| e.to_string())?;
-    let allow_unsupported = allow_unsupported_entity_sync();
     let mut push_events = Vec::new();
     let mut push_event_ids = Vec::new();
-    let mut unsupported_event_ids = Vec::new();
     let mut max_retry_count = 0;
 
     for event in pending {
-        if !allow_unsupported && !remote_supports_entity(&event.entity) {
-            unsupported_event_ids.push(event.event_id.clone());
-            continue;
-        }
-
         max_retry_count = max_retry_count.max(event.retry_count);
         let event_type = format!(
             "{}.{}.v1",
@@ -235,18 +228,6 @@ pub(super) async fn run_sync_cycle(
             payload: encrypted_payload,
             payload_key_version,
         });
-    }
-
-    if !unsupported_event_ids.is_empty() {
-        sync_repo
-            .schedule_outbox_retry(
-                unsupported_event_ids,
-                6 * 60 * 60,
-                Some("Entity not yet supported by remote sync contract".to_string()),
-                Some("unsupported_entity".to_string()),
-            )
-            .await
-            .map_err(|e| e.to_string())?;
     }
 
     let mut pushed_count = 0usize;
@@ -436,24 +417,6 @@ pub(super) async fn run_sync_cycle(
                         remote_event.event_id, remote_event.event_type, remote_event.seq
                     );
                     continue;
-                }
-                if !allow_unsupported && !remote_supports_entity(&local_entity) {
-                    log::warn!(
-                        "[DeviceSync] Replay blocked: unsupported entity '{}' for event {}",
-                        sync_entity_name(&local_entity),
-                        remote_event.event_id
-                    );
-                    return ctx
-                        .fail(
-                            "replay_blocked",
-                            format!(
-                                "Replay blocked: unsupported entity '{}' for event {}",
-                                sync_entity_name(&local_entity),
-                                remote_event.event_id
-                            ),
-                            Some(6 * 60 * 60),
-                        )
-                        .await;
                 }
                 let local_op = match parse_event_operation(&remote_event.event_type) {
                     Some(op) => op,

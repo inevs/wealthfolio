@@ -47,7 +47,7 @@ const getWebRedirectUrl = () => {
 // Uses env variable in dev, falls back to production URL for bundled builds
 const HOSTED_OAUTH_CALLBACK_URL =
   (import.meta.env.CONNECT_OAUTH_CALLBACK_URL as string) ||
-  "https://connect-staging.wealthfolio.app/deeplink";
+  "https://connect.wealthfolio.app/deeplink";
 
 type AuthCallbackPayload = { type: "code"; code: string } | { type: "error"; message: string };
 

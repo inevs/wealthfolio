@@ -254,10 +254,21 @@ fn resolve_local_device_id(conn: &mut SqliteConnection) -> Option<String> {
         .unwrap_or(None)
 }
 
+fn is_connect_configured() -> bool {
+    std::env::var("CONNECT_API_URL")
+        .ok()
+        .filter(|v| !v.trim().is_empty())
+        .is_some()
+}
+
 pub fn write_outbox_event(
     conn: &mut SqliteConnection,
     request: OutboxWriteRequest,
 ) -> Result<String> {
+    if !is_connect_configured() {
+        return Ok(String::new());
+    }
+
     let event_id = request
         .event_id
         .unwrap_or_else(|| Uuid::now_v7().to_string());
@@ -1384,12 +1395,17 @@ mod tests {
     use tempfile::tempdir;
 
     use crate::db::{create_pool, get_connection, init, run_migrations, write_actor::spawn_writer};
-    use crate::schema::{accounts, assets, sync_applied_events, sync_entity_metadata, sync_outbox};
+    use crate::schema::{
+        accounts, assets, platforms, sync_applied_events, sync_entity_metadata, sync_outbox,
+    };
 
     fn setup_db() -> (
         Arc<Pool<r2d2::ConnectionManager<SqliteConnection>>>,
         WriteHandle,
     ) {
+        // Ensure connect is "configured" so outbox writes work in tests
+        std::env::set_var("CONNECT_API_URL", "http://test.local");
+
         let app_data = tempdir()
             .expect("tempdir")
             .keep()
@@ -1469,6 +1485,18 @@ mod tests {
         let mut conn = get_connection(pool).expect("conn");
         assets::table
             .filter(assets::id.eq(asset_id))
+            .select(count_star())
+            .first(&mut conn)
+            .expect("count")
+    }
+
+    fn count_platform_rows(
+        pool: &Arc<Pool<r2d2::ConnectionManager<SqliteConnection>>>,
+        platform_id: &str,
+    ) -> i64 {
+        let mut conn = get_connection(pool).expect("conn");
+        platforms::table
+            .filter(platforms::id.eq(platform_id))
             .select(count_star())
             .first(&mut conn)
             .expect("count")
@@ -1732,6 +1760,132 @@ mod tests {
             .await;
 
         assert!(result.is_err(), "expected PK mismatch to be rejected");
+    }
+
+    #[tokio::test]
+    async fn replay_applies_platform_create_then_update() {
+        let (pool, writer) = setup_db();
+        let repo = AppSyncRepository::new(pool.clone(), writer);
+        let platform_id = "platform-sync-1".to_string();
+
+        let created = repo
+            .apply_remote_event_lww(
+                SyncEntity::Platform,
+                platform_id.clone(),
+                SyncOperation::Create,
+                "evt-platform-create".to_string(),
+                "2026-02-16T00:00:00Z".to_string(),
+                1,
+                serde_json::json!({
+                    "id": platform_id,
+                    "name": "Initial Platform",
+                    "url": "https://broker.example/initial",
+                    "external_id": "ext-platform-1",
+                    "kind": "BROKERAGE",
+                    "website_url": "https://broker.example",
+                    "logo_url": "https://broker.example/logo.png"
+                }),
+            )
+            .await
+            .expect("apply platform create");
+        assert!(created, "expected platform create to apply");
+
+        let updated = repo
+            .apply_remote_event_lww(
+                SyncEntity::Platform,
+                "platform-sync-1".to_string(),
+                SyncOperation::Update,
+                "evt-platform-update".to_string(),
+                "2026-02-16T00:00:01Z".to_string(),
+                2,
+                serde_json::json!({
+                    "id": "platform-sync-1",
+                    "name": "Renamed Platform",
+                    "url": "https://broker.example/updated",
+                    "external_id": "ext-platform-1",
+                    "kind": "BROKERAGE",
+                    "website_url": "https://broker.example/updated",
+                    "logo_url": "https://broker.example/logo-v2.png"
+                }),
+            )
+            .await
+            .expect("apply platform update");
+        assert!(updated, "expected platform update to apply");
+        assert_eq!(count_platform_rows(&pool, "platform-sync-1"), 1);
+
+        let mut conn = get_connection(&pool).expect("conn");
+        let (name_value, url_value): (Option<String>, String) = platforms::table
+            .filter(platforms::id.eq("platform-sync-1"))
+            .select((platforms::name, platforms::url))
+            .first(&mut conn)
+            .expect("platform row");
+        assert_eq!(name_value.as_deref(), Some("Renamed Platform"));
+        assert_eq!(url_value, "https://broker.example/updated");
+    }
+
+    #[tokio::test]
+    async fn replay_batch_applies_out_of_order_account_and_platform_events() {
+        let (pool, writer) = setup_db();
+        let repo = AppSyncRepository::new(pool.clone(), writer);
+
+        let applied = repo
+            .apply_remote_events_lww_batch(vec![
+                (
+                    SyncEntity::Account,
+                    "acc-batch-platform".to_string(),
+                    SyncOperation::Create,
+                    "evt-account-create".to_string(),
+                    "2026-02-17T00:00:00Z".to_string(),
+                    10,
+                    serde_json::json!({
+                        "id": "acc-batch-platform",
+                        "name": "Batch Account",
+                        "account_type": "cash",
+                        "group": serde_json::Value::Null,
+                        "currency": "USD",
+                        "is_default": false,
+                        "is_active": true,
+                        "platform_id": "platform-batch",
+                        "account_number": serde_json::Value::Null,
+                        "meta": serde_json::Value::Null,
+                        "provider": serde_json::Value::Null,
+                        "provider_account_id": serde_json::Value::Null,
+                        "is_archived": false,
+                        "tracking_mode": "portfolio"
+                    }),
+                ),
+                (
+                    SyncEntity::Platform,
+                    "platform-batch".to_string(),
+                    SyncOperation::Create,
+                    "evt-platform-create".to_string(),
+                    "2026-02-17T00:00:01Z".to_string(),
+                    11,
+                    serde_json::json!({
+                        "id": "platform-batch",
+                        "name": "Batch Platform",
+                        "url": "https://batch.example",
+                        "external_id": serde_json::Value::Null,
+                        "kind": "BROKERAGE",
+                        "website_url": serde_json::Value::Null,
+                        "logo_url": serde_json::Value::Null
+                    }),
+                ),
+            ])
+            .await
+            .expect("apply replay batch");
+
+        assert_eq!(applied, 2, "both events should apply in one batch");
+        assert_eq!(count_account_rows(&pool, "acc-batch-platform"), 1);
+        assert_eq!(count_platform_rows(&pool, "platform-batch"), 1);
+
+        let mut conn = get_connection(&pool).expect("conn");
+        let account_platform_id: Option<String> = accounts::table
+            .filter(accounts::id.eq("acc-batch-platform"))
+            .select(accounts::platform_id)
+            .first(&mut conn)
+            .expect("account row");
+        assert_eq!(account_platform_id.as_deref(), Some("platform-batch"));
     }
 
     #[tokio::test]

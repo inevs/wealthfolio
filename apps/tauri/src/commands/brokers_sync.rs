@@ -8,8 +8,8 @@ use crate::context::ServiceContext;
 use crate::events::{BROKER_SYNC_COMPLETE, BROKER_SYNC_ERROR, BROKER_SYNC_START};
 use wealthfolio_connect::{
     broker::BrokerApiClient, fetch_subscription_plans_public, BrokerAccount, BrokerConnection,
-    PlansResponse, Platform, SyncConfig, SyncOrchestrator, SyncProgressPayload,
-    SyncProgressReporter, SyncResult, UserInfo, DEFAULT_CLOUD_API_URL,
+    PlansResponse, Platform, SyncConfig, SyncOrchestrator, SyncProgressPayload, SyncProgressReporter,
+    SyncResult, UserInfo,
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -229,8 +229,13 @@ pub async fn get_subscription_plans(
 pub async fn get_subscription_plans_public() -> Result<PlansResponse, String> {
     info!("Fetching subscription plans from cloud API (public)...");
 
-    let base_url =
-        std::env::var("CONNECT_API_URL").unwrap_or_else(|_| DEFAULT_CLOUD_API_URL.to_string());
+    let base_url = std::env::var("CONNECT_API_URL")
+        .ok()
+        .map(|v| v.trim().trim_end_matches('/').to_string())
+        .filter(|v| !v.is_empty())
+        .ok_or_else(|| {
+            "CONNECT_API_URL not configured. Connect API operations are disabled.".to_string()
+        })?;
 
     match fetch_subscription_plans_public(&base_url).await {
         Ok(response) => {

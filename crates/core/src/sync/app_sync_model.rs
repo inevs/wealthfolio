@@ -205,7 +205,7 @@ pub trait EntitySyncAdapter: Send + Sync {
 
 #[cfg(test)]
 mod tests {
-    use super::should_apply_lww;
+    use super::{should_apply_lww, SyncEntity};
 
     #[test]
     fn lww_newer_timestamp_wins() {
@@ -235,5 +235,45 @@ mod tests {
             "2026-01-01T00:00:00Z",
             "0002"
         ));
+    }
+
+    #[test]
+    fn sync_entity_serialization_matches_backend_contract() {
+        let actual = [
+            SyncEntity::Account,
+            SyncEntity::Asset,
+            SyncEntity::AssetTaxonomyAssignment,
+            SyncEntity::Activity,
+            SyncEntity::ActivityImportProfile,
+            SyncEntity::Goal,
+            SyncEntity::GoalsAllocation,
+            SyncEntity::AiThread,
+            SyncEntity::AiMessage,
+            SyncEntity::AiThreadTag,
+            SyncEntity::ContributionLimit,
+            SyncEntity::Platform,
+            SyncEntity::Snapshot,
+        ]
+        .iter()
+        .map(|entity| serde_json::to_string(entity).expect("serialize sync entity"))
+        .collect::<Vec<_>>();
+
+        let expected = vec![
+            "\"account\"",
+            "\"asset\"",
+            "\"asset_taxonomy_assignment\"",
+            "\"activity\"",
+            "\"activity_import_profile\"",
+            "\"goal\"",
+            "\"goals_allocation\"",
+            "\"ai_thread\"",
+            "\"ai_message\"",
+            "\"ai_thread_tag\"",
+            "\"contribution_limit\"",
+            "\"platform\"",
+            "\"snapshot\"",
+        ];
+
+        assert_eq!(actual, expected);
     }
 }
