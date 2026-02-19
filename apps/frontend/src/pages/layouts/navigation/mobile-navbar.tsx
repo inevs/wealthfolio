@@ -14,7 +14,7 @@ import {
   SheetTitle,
 } from "@wealthfolio/ui";
 import { motion } from "motion/react";
-import React, { useCallback, useId, useMemo, useState } from "react";
+import React, { useCallback, useId, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { type NavigationProps, isPathActive } from "./app-navigation";
 
@@ -27,9 +27,8 @@ export function MobileNavBar({ navigation }: MobileNavBarProps) {
   const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [addonsSheetOpen, setAddonsSheetOpen] = useState(false);
-  const hapticFeedback = useHapticFeedback();
+  const { triggerHaptic } = useHapticFeedback();
   const uniqueId = useId();
-  const triggerHaptic = useMemo(() => hapticFeedback, [hapticFeedback]);
   const { status: syncStatus } = useAggregatedSyncStatus();
 
   const containerClassName = "pointer-events-none fixed inset-x-0 bottom-0 z-50 md:hidden";

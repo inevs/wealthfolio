@@ -172,7 +172,7 @@ export function SwipablePage({
       setSearchParams({ tab: nextView }, { replace: true });
       onViewChange?.(nextView);
     },
-    [currentView, setSearchParams, onViewChange, isMobile, hapticFeedback],
+    [currentView, setSearchParams, onViewChange, isMobile, triggerHaptic],
   );
 
   return (
