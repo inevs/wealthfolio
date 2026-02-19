@@ -1262,9 +1262,13 @@ export const invoke = async <T>(command: string, payload?: Record<string, unknow
     const parsed = (await res.json()) as { path: string };
     return parsed.path as T;
   }
-  // Handle responses with no body (204 No Content, 202 Accepted)
+  // Handle responses with no body (204 No Content, 202 Accepted, or empty 200)
   if (res.status === 204 || res.status === 202) {
     return undefined as T;
   }
-  return (await res.json()) as T;
+  const text = await res.text();
+  if (!text) {
+    return undefined as T;
+  }
+  return JSON.parse(text) as T;
 };
