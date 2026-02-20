@@ -203,7 +203,17 @@ export function SwipablePage({
                 selectedIndex={currentIndex}
                 items={views.map((v) => ({
                   name: v.label,
-                  content: <div className={cn("pb-safe", withPadding && "p-2")}>{v.content}</div>,
+                  content: (
+                    <div
+                      className={cn(
+                        withPadding
+                          ? "p-2 pb-[calc(var(--mobile-nav-ui-height)+max(var(--mobile-nav-gap),env(safe-area-inset-bottom)))]"
+                          : "pb-safe",
+                      )}
+                    >
+                      {v.content}
+                    </div>
+                  ),
                 }))}
                 displayToggle={false}
                 onViewChange={(_index: number, name: string) => {

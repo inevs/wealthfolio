@@ -1,5 +1,5 @@
 import { Page, PageContent, PageHeader } from "@/components/page";
-import { openUrlInBrowser } from "@/adapters";
+import { openUrlInBrowser, syncTriggerCycle } from "@/adapters";
 import { WEALTHFOLIO_CONNECT_PORTAL_URL } from "@/lib/constants";
 import { useWealthfolioConnect } from "@/features/wealthfolio-connect/providers/wealthfolio-connect-provider";
 import {
@@ -9,11 +9,19 @@ import {
 } from "@/features/wealthfolio-connect/hooks";
 import { ConnectEmptyState } from "@/features/wealthfolio-connect/components/connect-empty-state";
 import { useSyncBrokerData } from "@/features/wealthfolio-connect/hooks/use-sync-broker-data";
+import { useDeviceSync } from "@/features/devices-sync";
+import { useDevices } from "@/features/devices-sync/hooks";
 import { Icons } from "@wealthfolio/ui/components/ui/icons";
 import { Button } from "@wealthfolio/ui/components/ui/button";
 import { Badge } from "@wealthfolio/ui/components/ui/badge";
 import { Skeleton } from "@wealthfolio/ui/components/ui/skeleton";
-import { useMemo, useState, useEffect } from "react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@wealthfolio/ui/components/ui/tooltip";
+import { useMemo, useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@wealthfolio/ui/components/ui/card";
 import { Alert } from "@wealthfolio/ui/components/ui/alert";
 import { formatDistanceToNow } from "date-fns";
@@ -52,6 +60,13 @@ export default function ConnectPage() {
   const { status, lastSyncTime } = useAggregatedSyncStatus();
   const { data: brokerAccounts = [], isLoading: isLoadingAccounts } = useBrokerAccounts();
   const { mutate: syncBrokerData, isPending: isSyncing } = useSyncBrokerData();
+  const { state: deviceSyncState } = useDeviceSync();
+  const { data: devices } = useDevices("my");
+
+  const handleSyncAll = useCallback(() => {
+    syncBrokerData();
+    syncTriggerCycle();
+  }, [syncBrokerData]);
   const { data: importRunsData } = useImportRunsInfinite({ pageSize: 10 });
   const { accounts: localAccounts } = useAccounts({ filterActive: false, includeArchived: false }); // Get all accounts including inactive
 
@@ -229,34 +244,34 @@ export default function ConnectPage() {
         heading="Connect"
         text="Sync broker accounts into your local database"
         actions={
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             {statusBadge.show && (
-              <Badge variant={statusBadge.variant} className="gap-1.5">
+              <Badge variant={statusBadge.variant} className="hidden gap-1.5 sm:inline-flex">
                 <Icons.AlertCircle className="h-3 w-3" />
                 {statusBadge.label}
               </Badge>
             )}
             {lastSyncTime && (
-              <span className="text-muted-foreground flex items-center gap-1.5 text-sm">
+              <span className="text-muted-foreground hidden items-center gap-1.5 text-sm sm:flex">
                 <Icons.Clock className="h-3.5 w-3.5" />
                 {formatDistanceToNow(new Date(lastSyncTime), { addSuffix: false })} ago
               </span>
             )}
             <Button
-              onClick={() => syncBrokerData()}
+              onClick={handleSyncAll}
               disabled={isSyncing || status === "running"}
               size="sm"
               variant="outline"
             >
               {isSyncing || status === "running" ? (
                 <>
-                  <Icons.Spinner className="mr-2 h-4 w-4 animate-spin" />
-                  Syncing...
+                  <Icons.Spinner className="h-4 w-4 animate-spin sm:mr-2" />
+                  <span className="hidden sm:inline">Syncing...</span>
                 </>
               ) : (
                 <>
-                  <Icons.RefreshCw className="mr-2 h-4 w-4" />
-                  Sync now
+                  <Icons.RefreshCw className="h-4 w-4 sm:mr-2" />
+                  <span className="hidden sm:inline">Sync now</span>
                 </>
               )}
             </Button>
@@ -294,17 +309,19 @@ export default function ConnectPage() {
           {/* Stats Cards Row */}
           <Card>
             <CardContent className="p-0">
-              <div className="divide-border grid grid-cols-3 divide-x">
+              <div className="divide-border grid grid-cols-1 divide-y sm:grid-cols-3 sm:divide-x sm:divide-y-0">
                 {/* Broker Connections */}
                 <button
-                  className="hover:bg-muted/50 flex items-center gap-4 p-5 text-left transition-colors"
+                  className="hover:bg-muted/50 flex items-center gap-4 p-3 text-left transition-colors sm:p-5"
                   onClick={() => openUrlInBrowser(`${WEALTHFOLIO_CONNECT_PORTAL_URL}/connections`)}
                 >
-                  <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-blue-500/10 dark:bg-blue-500/20">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-500/10 sm:h-12 sm:w-12 dark:bg-blue-500/20">
                     <Icons.Link className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                   </div>
                   <div className="flex flex-1 items-baseline gap-2">
-                    <span className="text-2xl font-semibold">{brokerConnections.length}</span>
+                    <span className="text-xl font-semibold sm:text-2xl">
+                      {brokerConnections.length}
+                    </span>
                     <span className="text-muted-foreground text-sm">Broker connections</span>
                   </div>
                   <Icons.Plus className="text-muted-foreground h-4 w-4" />
@@ -312,29 +329,34 @@ export default function ConnectPage() {
 
                 {/* Synced Accounts */}
                 <button
-                  className="hover:bg-muted/50 flex items-center gap-4 p-5 text-left transition-colors"
+                  className="hover:bg-muted/50 flex items-center gap-4 p-3 text-left transition-colors sm:p-5"
                   onClick={() => openUrlInBrowser(`${WEALTHFOLIO_CONNECT_PORTAL_URL}/accounts`)}
                 >
-                  <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-green-500/10 dark:bg-green-500/20">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-green-500/10 sm:h-12 sm:w-12 dark:bg-green-500/20">
                     <Icons.Wallet className="h-5 w-5 text-green-600 dark:text-green-400" />
                   </div>
                   <div className="flex items-baseline gap-2">
-                    <span className="text-2xl font-semibold">{enabledAccountsCount}</span>
+                    <span className="text-xl font-semibold sm:text-2xl">
+                      {enabledAccountsCount}
+                    </span>
                     <span className="text-muted-foreground text-sm">Synced accounts</span>
                   </div>
                 </button>
 
                 {/* Devices */}
                 <button
-                  className="hover:bg-muted/50 flex items-center gap-4 p-5 text-left transition-colors"
+                  className="hover:bg-muted/50 flex items-center gap-4 p-3 text-left transition-colors sm:p-5"
                   onClick={() => openUrlInBrowser(`${WEALTHFOLIO_CONNECT_PORTAL_URL}/devices`)}
                 >
-                  <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-purple-500/10 dark:bg-purple-500/20">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-purple-500/10 sm:h-12 sm:w-12 dark:bg-purple-500/20">
                     <Icons.Monitor className="h-5 w-5 text-purple-600 dark:text-purple-400" />
                   </div>
                   <div className="flex items-baseline gap-2">
-                    <span className="text-2xl font-semibold">1</span>
+                    <span className="text-xl font-semibold sm:text-2xl">
+                      {devices?.length ?? 0}
+                    </span>
                     <span className="text-muted-foreground text-sm">Devices</span>
+                    <DeviceSyncStatusDot engineStatus={deviceSyncState.engineStatus} />
                   </div>
                 </button>
               </div>
@@ -577,18 +599,21 @@ function ActivityItem({ run, accountName }: { run: ImportRun; accountName?: stri
 
   return (
     <div
-      className={`flex items-center gap-4 px-3 py-3 ${
+      className={`flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-3 sm:flex-nowrap sm:gap-4 ${
         needsAttention ? "bg-yellow-500/10 dark:bg-yellow-500/5" : "hover:bg-muted/30"
       }`}
     >
       <StatusDot status={dotStatus} />
-      <span className="text-muted-foreground min-w-[100px] shrink-0 whitespace-nowrap text-sm">
+      <span className="text-muted-foreground shrink-0 whitespace-nowrap text-xs sm:min-w-[100px] sm:text-sm">
         {timeAgo} ago
       </span>
       {accountName && (
-        <span className="min-w-[120px] shrink-0 truncate text-sm font-medium">{accountName}</span>
+        <span className="hidden shrink-0 truncate text-sm font-medium sm:inline sm:min-w-[120px]">
+          {accountName}
+        </span>
       )}
-      <div className="flex flex-1 flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+      <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-1 text-xs sm:w-auto sm:flex-1 sm:text-sm">
+        {accountName && <span className="font-medium sm:hidden">{accountName}</span>}
         {inserted > 0 && (
           <span className="font-medium text-green-600 dark:text-green-500">
             +{inserted} new {inserted === 1 ? "activity" : "activities"}
@@ -629,5 +654,51 @@ function ActivityItem({ run, accountName }: { run: ImportRun; accountName?: stri
         </Link>
       )}
     </div>
+  );
+}
+
+// Device sync engine status dot (mirrors SyncStatusDot from device-sync-section)
+function DeviceSyncStatusDot({
+  engineStatus,
+}: {
+  engineStatus: {
+    backgroundRunning: boolean;
+    lastCycleStatus: string | null;
+    lastError: string | null;
+    consecutiveFailures: number;
+  } | null;
+}) {
+  if (!engineStatus) return null;
+
+  const { backgroundRunning, lastCycleStatus, lastError, consecutiveFailures } = engineStatus;
+
+  let color: string;
+  let label: string;
+
+  if (lastError || consecutiveFailures > 2) {
+    color = "bg-red-500";
+    label = lastError ? `Sync error: ${lastError}` : "Sync error";
+  } else if (!backgroundRunning) {
+    color = "bg-gray-400";
+    label = "Sync paused";
+  } else if (lastCycleStatus === "ok") {
+    color = "bg-green-500";
+    label = "Synced";
+  } else {
+    color = "bg-yellow-500";
+    label = "Syncing";
+  }
+
+  return (
+    <TooltipProvider delayDuration={300}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className={`inline-block h-2 w-2 shrink-0 rounded-full ${color}`} />
+        </TooltipTrigger>
+        <TooltipContent side="right" className="max-w-64 text-xs">
+          {label}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }

@@ -221,21 +221,21 @@ function ChatShellInner({ className }: ChatShellProps) {
         <RecordActivityToolUI />
         <ImportCsvToolUI />
 
-        <div className={cn("bg-background flex h-full w-full", className)}>
+        <div className={cn("bg-background flex h-full min-h-0 w-full", className)}>
           {/* Desktop Sidebar */}
           <div className="hidden md:block">
             <Sidebar collapsed={sidebarCollapsed} />
           </div>
 
           {/* Main Content Area */}
-          <div className="flex flex-1 flex-col overflow-hidden">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
             <Header
               sidebarCollapsed={sidebarCollapsed}
               onToggleSidebar={() => setSidebarCollapsed(!sidebarCollapsed)}
             />
 
             {/* Thread (Chat Messages) */}
-            <main className="flex-1 overflow-hidden">
+            <main className="min-h-0 flex-1 overflow-hidden">
               <Thread composerActions={<ModelPicker />} />
             </main>
           </div>
