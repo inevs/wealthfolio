@@ -1,6 +1,6 @@
 import { LiquidGlass } from "@/components/liquid-glass";
-import { useAggregatedSyncStatus } from "@/features/wealthfolio-connect/hooks";
 import { SyncStatusIcon } from "@/features/wealthfolio-connect/components/sync-status-icon";
+import { useAggregatedSyncStatus } from "@/features/wealthfolio-connect/hooks";
 import { useHapticFeedback } from "@/hooks/use-haptic-feedback";
 import { cn } from "@/lib/utils";
 import {
@@ -31,7 +31,7 @@ export function MobileNavBar({ navigation }: MobileNavBarProps) {
   const uniqueId = useId();
   const { status: syncStatus } = useAggregatedSyncStatus();
 
-  const containerClassName = "pointer-events-none fixed inset-x-0 bottom-0 z-50 md:hidden";
+  const containerClassName = "pointer-events-none fixed inset-x-0 bottom-0 z-50";
 
   const handleNavigation = useCallback(
     (href: string, isActive: boolean) => {
