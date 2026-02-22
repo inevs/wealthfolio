@@ -1313,10 +1313,13 @@ impl AppSyncRepository {
     pub async fn export_snapshot_sqlite_image(&self, tables: Vec<String>) -> Result<Vec<u8>> {
         /// Per-table WHERE filters applied during snapshot export.
         /// Tables not listed here are exported unfiltered.
-        const SYNC_TABLE_EXPORT_FILTERS: &[(&str, &str)] = &[(
-            "holdings_snapshots",
-            "source IN ('MANUAL_ENTRY', 'CSV_IMPORT', 'SYNTHETIC', 'BROKER_IMPORTED')",
-        ), ("quotes", "source = 'MANUAL'")];
+        const SYNC_TABLE_EXPORT_FILTERS: &[(&str, &str)] = &[
+            (
+                "holdings_snapshots",
+                "source IN ('MANUAL_ENTRY', 'CSV_IMPORT', 'SYNTHETIC', 'BROKER_IMPORTED')",
+            ),
+            ("quotes", "source = 'MANUAL'"),
+        ];
 
         let pool = Arc::clone(&self.pool);
         tokio::task::spawn_blocking(move || -> Result<Vec<u8>> {
@@ -2428,7 +2431,10 @@ mod tests {
             diesel::sql_query("SELECT COUNT(*) AS c FROM holdings_snapshots")
                 .get_result(&mut exported_conn)
                 .expect("count snapshot rows");
-        assert_eq!(snapshot_count.c, 2, "manual + broker snapshots should export");
+        assert_eq!(
+            snapshot_count.c, 2,
+            "manual + broker snapshots should export"
+        );
 
         let broker_count: CountRow = diesel::sql_query(
             "SELECT COUNT(*) AS c FROM holdings_snapshots WHERE source = 'BROKER_IMPORTED'",
@@ -2442,7 +2448,10 @@ mod tests {
         )
         .get_result(&mut exported_conn)
         .expect("count calculated snapshots");
-        assert_eq!(calculated_count.c, 0, "calculated snapshots should not export");
+        assert_eq!(
+            calculated_count.c, 0,
+            "calculated snapshots should not export"
+        );
 
         let quote_count: CountRow = diesel::sql_query("SELECT COUNT(*) AS c FROM quotes")
             .get_result(&mut exported_conn)
@@ -2453,7 +2462,10 @@ mod tests {
             diesel::sql_query("SELECT COUNT(*) AS c FROM quotes WHERE source != 'MANUAL'")
                 .get_result(&mut exported_conn)
                 .expect("count provider quote rows");
-        assert_eq!(provider_quote_count.c, 0, "provider quotes should not export");
+        assert_eq!(
+            provider_quote_count.c, 0,
+            "provider quotes should not export"
+        );
     }
 
     #[test]

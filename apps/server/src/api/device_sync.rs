@@ -41,20 +41,21 @@ async fn get_access_token(state: &AppState) -> ApiResult<String> {
 fn get_device_id(state: &AppState) -> Option<String> {
     // Preferred source: sync_identity (used by DeviceEnrollService).
     match state.secret_store.get_secret(SYNC_IDENTITY_KEY) {
-        Ok(Some(identity_json)) => {
-            match serde_json::from_str::<SyncIdentity>(&identity_json) {
-                Ok(identity) => {
-                    if let Some(device_id) = identity.device_id {
-                        debug!("[DeviceSync] Using device ID from sync_identity: {}", device_id);
-                        return Some(device_id);
-                    }
-                    debug!("[DeviceSync] sync_identity present but missing deviceId");
+        Ok(Some(identity_json)) => match serde_json::from_str::<SyncIdentity>(&identity_json) {
+            Ok(identity) => {
+                if let Some(device_id) = identity.device_id {
+                    debug!(
+                        "[DeviceSync] Using device ID from sync_identity: {}",
+                        device_id
+                    );
+                    return Some(device_id);
                 }
-                Err(e) => {
-                    tracing::warn!("[DeviceSync] Failed to parse sync_identity: {}", e);
-                }
+                debug!("[DeviceSync] sync_identity present but missing deviceId");
             }
-        }
+            Err(e) => {
+                tracing::warn!("[DeviceSync] Failed to parse sync_identity: {}", e);
+            }
+        },
         Ok(None) => {
             debug!("[DeviceSync] No sync_identity in store");
         }

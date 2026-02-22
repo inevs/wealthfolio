@@ -146,14 +146,11 @@ impl DeviceEnrollService {
     /// Get the current sync state.
     /// Reads from secret store and optionally verifies with server.
     pub async fn get_sync_state(&self) -> Result<SyncStateResult, EnrollServiceError> {
-        info!("[DeviceEnrollService] Getting sync state...");
-
         // Read identity from secret store
         let identity = self.read_identity()?;
 
         // No identity or no nonce = FRESH
         if identity.device_nonce.is_none() {
-            info!("[DeviceEnrollService] State: FRESH (no device nonce)");
             return Ok(SyncStateResult {
                 state: SyncState::Fresh,
                 device_id: None,
@@ -169,7 +166,6 @@ impl DeviceEnrollService {
         let device_id = match &identity.device_id {
             Some(id) => id.clone(),
             None => {
-                info!("[DeviceEnrollService] State: FRESH (no device ID)");
                 return Ok(SyncStateResult {
                     state: SyncState::Fresh,
                     device_id: None,
@@ -235,7 +231,6 @@ impl DeviceEnrollService {
                 vec![]
             };
 
-            info!("[DeviceEnrollService] State: REGISTERED (no E2EE keys)");
             return Ok(SyncStateResult {
                 state: SyncState::Registered,
                 device_id: Some(device_id),
@@ -270,7 +265,6 @@ impl DeviceEnrollService {
         }
 
         // All checks passed = READY
-        info!("[DeviceEnrollService] State: READY");
         Ok(SyncStateResult {
             state: SyncState::Ready,
             device_id: Some(device_id),
@@ -294,10 +288,6 @@ impl DeviceEnrollService {
 
         // Generate device nonce
         let device_nonce = crypto::generate_device_id();
-        debug!(
-            "[DeviceEnrollService] Generated device nonce: {}",
-            device_nonce
-        );
 
         // Save nonce immediately (so we can recover if later steps fail)
         self.save_identity(&SyncIdentity {

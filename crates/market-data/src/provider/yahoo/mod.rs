@@ -1224,5 +1224,4 @@ mod tests {
         let mapped = provider.convert_yahoo_error(err, "TEST");
         assert!(matches!(mapped, MarketDataError::NoDataForRange));
     }
-
 }
