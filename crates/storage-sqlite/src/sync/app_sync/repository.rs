@@ -77,6 +77,24 @@ struct PragmaTableXInfoRow {
     hidden: i32,
 }
 
+#[derive(diesel::QueryableByName)]
+struct TableRowCountResult {
+    #[diesel(sql_type = diesel::sql_types::BigInt)]
+    count: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SyncTableRowCount {
+    pub table: String,
+    pub rows: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SyncLocalDataSummary {
+    pub total_rows: i64,
+    pub non_empty_tables: Vec<SyncTableRowCount>,
+}
+
 fn load_table_columns(
     conn: &mut SqliteConnection,
     db_name: &str,
@@ -738,6 +756,34 @@ impl AppSyncRepository {
         Ok(match config {
             None => true,
             Some(row) => row.last_bootstrap_at.is_none() || stale_cursor_detected,
+        })
+    }
+
+    pub fn get_local_sync_data_summary(&self) -> Result<SyncLocalDataSummary> {
+        let mut conn = get_connection(&self.pool)?;
+        let mut total_rows = 0_i64;
+        let mut non_empty_tables = Vec::new();
+
+        for table in APP_SYNC_TABLES {
+            let table_ident = quote_identifier(table);
+            let count_sql = format!("SELECT COUNT(*) AS count FROM {table_ident}");
+            let row = diesel::sql_query(count_sql)
+                .get_result::<TableRowCountResult>(&mut conn)
+                .map_err(StorageError::from)?;
+            total_rows += row.count;
+            if row.count > 0 {
+                non_empty_tables.push(SyncTableRowCount {
+                    table: table.to_string(),
+                    rows: row.count,
+                });
+            }
+        }
+
+        non_empty_tables.sort_by(|a, b| b.rows.cmp(&a.rows).then_with(|| a.table.cmp(&b.table)));
+
+        Ok(SyncLocalDataSummary {
+            total_rows,
+            non_empty_tables,
         })
     }
 
@@ -1874,6 +1920,39 @@ mod tests {
             repo.needs_bootstrap("device-1").expect("needs bootstrap"),
             "bootstrap should be required after stale cursor cycle"
         );
+    }
+
+    #[tokio::test]
+    async fn local_sync_data_summary_reports_non_empty_tables() {
+        let (pool, writer) = setup_db();
+        let repo = AppSyncRepository::new(pool.clone(), writer);
+        let baseline = repo
+            .get_local_sync_data_summary()
+            .expect("baseline sync summary");
+
+        {
+            let mut conn = get_connection(&pool).expect("conn");
+            insert_account_for_test(&mut conn, "acc-summary").expect("insert account");
+        }
+
+        let summary = repo
+            .get_local_sync_data_summary()
+            .expect("sync summary after insert");
+        assert!(
+            summary.total_rows > baseline.total_rows,
+            "total_rows should increase after inserting sync data"
+        );
+        let account_row = summary
+            .non_empty_tables
+            .iter()
+            .find(|row| row.table == "accounts")
+            .expect("accounts table should be reported as non-empty");
+        assert!(account_row.rows >= 1);
+        assert!(summary.non_empty_tables.windows(2).all(|window| {
+            let first = &window[0];
+            let second = &window[1];
+            first.rows > second.rows || (first.rows == second.rows && first.table <= second.table)
+        }));
     }
 
     #[tokio::test]

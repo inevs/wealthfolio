@@ -43,6 +43,7 @@ pub struct SyncBootstrapResult {
 pub struct SyncReadyReconcileResult {
     pub status: String,
     pub message: String,
+    pub bootstrap_action: String,
     pub bootstrap_status: String,
     pub bootstrap_message: Option<String>,
     pub bootstrap_snapshot_id: Option<String>,

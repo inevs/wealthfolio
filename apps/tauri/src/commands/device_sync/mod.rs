@@ -25,6 +25,7 @@ use wealthfolio_device_sync::{
     GetPairingResponse, InitializeKeysResult, PairingMessagesResponse, RegisterDeviceRequest,
     ResetTeamSyncResponse, RotateKeysResponse, SuccessResponse, UpdateDeviceRequest,
 };
+use wealthfolio_storage_sqlite::sync::SyncTableRowCount;
 
 // Re-export public items consumed by lib.rs
 pub use engine::{ensure_background_engine_started, ensure_background_engine_stopped};
@@ -152,6 +153,22 @@ pub struct SyncEngineStatusResult {
 
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct SyncBootstrapOverwriteCheckTableResult {
+    pub table: String,
+    pub rows: i64,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SyncBootstrapOverwriteCheckResult {
+    pub bootstrap_required: bool,
+    pub has_local_data: bool,
+    pub local_rows: i64,
+    pub non_empty_tables: Vec<SyncBootstrapOverwriteCheckTableResult>,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SyncCycleResult {
     pub status: String,
     pub lock_version: i64,
@@ -184,6 +201,7 @@ pub struct SyncSnapshotUploadResult {
 pub struct SyncReconcileReadyStateResult {
     pub status: String,
     pub message: String,
+    pub bootstrap_action: String,
     pub bootstrap_status: String,
     pub bootstrap_message: Option<String>,
     pub bootstrap_snapshot_id: Option<String>,
@@ -199,6 +217,7 @@ impl From<shared_sync_engine::SyncReadyReconcileResult> for SyncReconcileReadySt
         Self {
             status: value.status,
             message: value.message,
+            bootstrap_action: value.bootstrap_action,
             bootstrap_status: value.bootstrap_status,
             bootstrap_message: value.bootstrap_message,
             bootstrap_snapshot_id: value.bootstrap_snapshot_id,
@@ -709,6 +728,46 @@ pub async fn sync_engine_status(
 }
 
 #[tauri::command]
+pub async fn device_sync_bootstrap_overwrite_check(
+    state: State<'_, Arc<ServiceContext>>,
+) -> Result<SyncBootstrapOverwriteCheckResult, String> {
+    let sync_repo = state.app_sync_repository();
+    let bootstrap_required = match get_device_id_from_store() {
+        Some(device_id) => sync_repo
+            .needs_bootstrap(&device_id)
+            .map_err(|e| e.to_string())?,
+        None => true,
+    };
+    if !bootstrap_required {
+        return Ok(SyncBootstrapOverwriteCheckResult {
+            bootstrap_required,
+            has_local_data: false,
+            local_rows: 0,
+            non_empty_tables: Vec::new(),
+        });
+    }
+    let summary = sync_repo
+        .get_local_sync_data_summary()
+        .map_err(|e| e.to_string())?;
+
+    Ok(SyncBootstrapOverwriteCheckResult {
+        bootstrap_required,
+        has_local_data: summary.total_rows > 0,
+        local_rows: summary.total_rows,
+        non_empty_tables: summary
+            .non_empty_tables
+            .into_iter()
+            .map(
+                |SyncTableRowCount { table, rows }| SyncBootstrapOverwriteCheckTableResult {
+                    table,
+                    rows,
+                },
+            )
+            .collect(),
+    })
+}
+
+#[tauri::command]
 pub async fn sync_trigger_cycle(
     state: State<'_, Arc<ServiceContext>>,
 ) -> Result<SyncCycleResult, String> {
@@ -1037,6 +1096,7 @@ mod tests {
         let source = shared_sync_engine::SyncReadyReconcileResult {
             status: "ok".to_string(),
             message: "done".to_string(),
+            bootstrap_action: "NO_BOOTSTRAP".to_string(),
             bootstrap_status: "applied".to_string(),
             bootstrap_message: Some("bootstrap ok".to_string()),
             bootstrap_snapshot_id: Some("snap-1".to_string()),
@@ -1050,6 +1110,7 @@ mod tests {
         let converted: SyncReconcileReadyStateResult = source.clone().into();
         assert_eq!(converted.status, source.status);
         assert_eq!(converted.message, source.message);
+        assert_eq!(converted.bootstrap_action, source.bootstrap_action);
         assert_eq!(converted.bootstrap_status, source.bootstrap_status);
         assert_eq!(converted.bootstrap_message, source.bootstrap_message);
         assert_eq!(

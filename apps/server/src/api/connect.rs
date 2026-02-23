@@ -146,6 +146,22 @@ struct DeviceSyncEngineStatusResponse {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+struct DeviceSyncBootstrapOverwriteCheckTableResponse {
+    table: String,
+    rows: i64,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DeviceSyncBootstrapOverwriteCheckResponse {
+    bootstrap_required: bool,
+    has_local_data: bool,
+    local_rows: i64,
+    non_empty_tables: Vec<DeviceSyncBootstrapOverwriteCheckTableResponse>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct DeviceSyncBootstrapResponse {
     status: String,
     message: String,
@@ -178,6 +194,7 @@ struct DeviceSyncBackgroundResponse {
 struct DeviceSyncReconcileReadyResponse {
     status: String,
     message: String,
+    bootstrap_action: String,
     bootstrap_status: String,
     bootstrap_message: Option<String>,
     bootstrap_snapshot_id: Option<String>,
@@ -194,6 +211,7 @@ fn to_device_sync_reconcile_ready_response(
     DeviceSyncReconcileReadyResponse {
         status: result.status,
         message: result.message,
+        bootstrap_action: result.bootstrap_action,
         bootstrap_status: result.bootstrap_status,
         bootstrap_message: result.bootstrap_message,
         bootstrap_snapshot_id: result.bootstrap_snapshot_id,
@@ -1047,6 +1065,29 @@ async fn get_device_sync_engine_status(
     }))
 }
 
+async fn get_device_sync_bootstrap_overwrite_check(
+    State(state): State<Arc<AppState>>,
+) -> ApiResult<Json<DeviceSyncBootstrapOverwriteCheckResponse>> {
+    ensure_device_sync_enabled()?;
+    let result = device_sync_engine::get_bootstrap_overwrite_check(&state)
+        .await
+        .map_err(ApiError::Internal)?;
+
+    Ok(Json(DeviceSyncBootstrapOverwriteCheckResponse {
+        bootstrap_required: result.bootstrap_required,
+        has_local_data: result.has_local_data,
+        local_rows: result.local_rows,
+        non_empty_tables: result
+            .non_empty_tables
+            .into_iter()
+            .map(|table| DeviceSyncBootstrapOverwriteCheckTableResponse {
+                table: table.table,
+                rows: table.rows,
+            })
+            .collect(),
+    }))
+}
+
 async fn bootstrap_device_snapshot(
     State(state): State<Arc<AppState>>,
 ) -> ApiResult<Json<DeviceSyncBootstrapResponse>> {
@@ -1198,6 +1239,10 @@ pub fn router() -> Router<Arc<AppState>> {
             get(get_device_sync_engine_status),
         )
         .route(
+            "/connect/device/bootstrap-overwrite-check",
+            get(get_device_sync_bootstrap_overwrite_check),
+        )
+        .route(
             "/connect/device/reconcile-ready-state",
             post(reconcile_device_sync_ready_state),
         )
@@ -1241,6 +1286,7 @@ mod tests {
         let source = device_sync_engine::SyncReconcileReadyStateResult {
             status: "ok".to_string(),
             message: "done".to_string(),
+            bootstrap_action: "NO_BOOTSTRAP".to_string(),
             bootstrap_status: "applied".to_string(),
             bootstrap_message: Some("bootstrap ok".to_string()),
             bootstrap_snapshot_id: Some("snap-1".to_string()),
@@ -1254,6 +1300,7 @@ mod tests {
         let mapped = to_device_sync_reconcile_ready_response(source.clone());
         assert_eq!(mapped.status, source.status);
         assert_eq!(mapped.message, source.message);
+        assert_eq!(mapped.bootstrap_action, source.bootstrap_action);
         assert_eq!(mapped.bootstrap_status, source.bootstrap_status);
         assert_eq!(mapped.bootstrap_message, source.bootstrap_message);
         assert_eq!(mapped.bootstrap_snapshot_id, source.bootstrap_snapshot_id);

@@ -224,7 +224,40 @@ export interface BackendSyncEngineStatusResult {
   bootstrapRequired: boolean;
 }
 
+export interface BackendSyncBootstrapOverwriteCheckTableResult {
+  table: string;
+  rows: number;
+}
+
+/**
+ * Result from device_sync_bootstrap_overwrite_check command.
+ */
+export interface BackendSyncBootstrapOverwriteCheckResult {
+  bootstrapRequired: boolean;
+  hasLocalData: boolean;
+  localRows: number;
+  nonEmptyTables: BackendSyncBootstrapOverwriteCheckTableResult[];
+}
+
 export interface BackendSyncReconcileReadyResult {
+  action?: "PULL_TAIL" | "BOOTSTRAP_SNAPSHOT" | "WAIT_SNAPSHOT" | "NOOP";
+  bootstrapAction: "PULL_REMOTE_OVERWRITE" | "NO_REMOTE_PULL" | "NO_BOOTSTRAP";
+  reason?: string;
+  reconcileReason?: string;
+  cursor?: number;
+  deviceCursor?: number;
+  gcWatermark?: number;
+  staleCursor?: boolean;
+  diagnostics?: {
+    remoteSnapshotExists?: boolean;
+    trustedDeviceCount?: number;
+    teamKeyVersion?: number;
+    latestSnapshot?: {
+      snapshotId: string;
+      schemaVersion: number;
+      oplogSeq: number;
+    } | null;
+  };
   status: "ok" | "skipped_not_ready" | "error";
   message: string;
   bootstrapStatus: "applied" | "skipped" | "requested" | "not_attempted";

@@ -198,6 +198,10 @@ export const COMMANDS: CommandMap = {
   clear_device_sync_data: { method: "DELETE", path: "/connect/device/sync-data" },
   reinitialize_device_sync: { method: "POST", path: "/connect/device/reinitialize" },
   device_sync_engine_status: { method: "GET", path: "/connect/device/engine-status" },
+  device_sync_bootstrap_overwrite_check: {
+    method: "GET",
+    path: "/connect/device/bootstrap-overwrite-check",
+  },
   device_sync_reconcile_ready_state: {
     method: "POST",
     path: "/connect/device/reconcile-ready-state",
@@ -1230,6 +1234,7 @@ export const invoke = async <T>(command: string, payload?: Record<string, unknow
     "sync_broker_data",
     "broker_ingest_run",
     "device_sync_engine_status",
+    "device_sync_bootstrap_overwrite_check",
     "device_sync_reconcile_ready_state",
     "device_sync_bootstrap_snapshot_if_needed",
     "device_sync_trigger_cycle",

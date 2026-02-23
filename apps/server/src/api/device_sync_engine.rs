@@ -29,7 +29,7 @@ fn transport_err_from_sync(e: wealthfolio_device_sync::DeviceSyncError) -> Trans
         },
     }
 }
-use wealthfolio_storage_sqlite::sync::SqliteSyncEngineDbPorts;
+use wealthfolio_storage_sqlite::sync::{SqliteSyncEngineDbPorts, SyncTableRowCount};
 
 const SYNC_IDENTITY_KEY: &str = "sync_identity";
 
@@ -45,6 +45,20 @@ pub struct SyncEngineStatusResult {
     pub last_cycle_duration_ms: Option<i64>,
     pub background_running: bool,
     pub bootstrap_required: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct SyncBootstrapOverwriteCheckTableResult {
+    pub table: String,
+    pub rows: i64,
+}
+
+#[derive(Debug, Clone)]
+pub struct SyncBootstrapOverwriteCheckResult {
+    pub bootstrap_required: bool,
+    pub has_local_data: bool,
+    pub local_rows: i64,
+    pub non_empty_tables: Vec<SyncBootstrapOverwriteCheckTableResult>,
 }
 
 #[derive(Debug, Clone)]
@@ -67,6 +81,7 @@ pub struct SyncSnapshotUploadResult {
 pub struct SyncReconcileReadyStateResult {
     pub status: String,
     pub message: String,
+    pub bootstrap_action: String,
     pub bootstrap_status: String,
     pub bootstrap_message: Option<String>,
     pub bootstrap_snapshot_id: Option<String>,
@@ -82,6 +97,7 @@ impl From<engine::SyncReadyReconcileResult> for SyncReconcileReadyStateResult {
         Self {
             status: value.status,
             message: value.message,
+            bootstrap_action: value.bootstrap_action,
             bootstrap_status: value.bootstrap_status,
             bootstrap_message: value.bootstrap_message,
             bootstrap_snapshot_id: value.bootstrap_snapshot_id,
@@ -462,6 +478,47 @@ pub async fn get_engine_status(state: &Arc<AppState>) -> Result<SyncEngineStatus
         last_cycle_duration_ms: status.last_cycle_duration_ms,
         background_running,
         bootstrap_required,
+    })
+}
+
+pub async fn get_bootstrap_overwrite_check(
+    state: &Arc<AppState>,
+) -> Result<SyncBootstrapOverwriteCheckResult, String> {
+    ensure_device_sync_enabled()?;
+    let bootstrap_required = match get_sync_identity_from_store(state).and_then(|i| i.device_id) {
+        Some(device_id) => state
+            .app_sync_repository
+            .needs_bootstrap(&device_id)
+            .map_err(|e| e.to_string())?,
+        None => true,
+    };
+    if !bootstrap_required {
+        return Ok(SyncBootstrapOverwriteCheckResult {
+            bootstrap_required,
+            has_local_data: false,
+            local_rows: 0,
+            non_empty_tables: Vec::new(),
+        });
+    }
+    let summary = state
+        .app_sync_repository
+        .get_local_sync_data_summary()
+        .map_err(|e| e.to_string())?;
+
+    Ok(SyncBootstrapOverwriteCheckResult {
+        bootstrap_required,
+        has_local_data: summary.total_rows > 0,
+        local_rows: summary.total_rows,
+        non_empty_tables: summary
+            .non_empty_tables
+            .into_iter()
+            .map(
+                |SyncTableRowCount { table, rows }| SyncBootstrapOverwriteCheckTableResult {
+                    table,
+                    rows,
+                },
+            )
+            .collect(),
     })
 }
 
@@ -847,6 +904,7 @@ mod tests {
         let source = engine::SyncReadyReconcileResult {
             status: "ok".to_string(),
             message: "done".to_string(),
+            bootstrap_action: "none".to_string(),
             bootstrap_status: "applied".to_string(),
             bootstrap_message: Some("bootstrap ok".to_string()),
             bootstrap_snapshot_id: Some("snap-1".to_string()),

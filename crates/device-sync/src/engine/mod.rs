@@ -804,6 +804,25 @@ fn reconcile_error(
     result
 }
 
+fn derive_bootstrap_action(bootstrap_status: &str, bootstrap_snapshot_id: Option<&str>) -> String {
+    if bootstrap_status == "applied" {
+        return "PULL_REMOTE_OVERWRITE".to_string();
+    }
+
+    if bootstrap_status == "requested" {
+        return "NO_REMOTE_PULL".to_string();
+    }
+
+    if bootstrap_snapshot_id
+        .map(|id| !id.trim().is_empty())
+        .unwrap_or(false)
+    {
+        return "PULL_REMOTE_OVERWRITE".to_string();
+    }
+
+    "NO_BOOTSTRAP".to_string()
+}
+
 pub async fn run_ready_reconcile_state<P>(ports: &P) -> SyncReadyReconcileResult
 where
     P: ReadyReconcileStore + Send + Sync,
@@ -811,6 +830,7 @@ where
     let mut result = SyncReadyReconcileResult {
         status: "ok".to_string(),
         message: "Device sync reconcile completed".to_string(),
+        bootstrap_action: "NO_BOOTSTRAP".to_string(),
         bootstrap_status: "not_attempted".to_string(),
         bootstrap_message: None,
         bootstrap_snapshot_id: None,
@@ -842,6 +862,10 @@ where
     result.bootstrap_status = bootstrap_result.status.clone();
     result.bootstrap_message = Some(bootstrap_result.message);
     result.bootstrap_snapshot_id = bootstrap_result.snapshot_id;
+    result.bootstrap_action = derive_bootstrap_action(
+        &result.bootstrap_status,
+        result.bootstrap_snapshot_id.as_deref(),
+    );
 
     if result.bootstrap_status == "applied" {
         let cycle_result = match ports.run_sync_cycle().await {
@@ -867,6 +891,10 @@ where
             result.bootstrap_status = retry_bootstrap_result.status.clone();
             result.bootstrap_message = Some(retry_bootstrap_result.message);
             result.bootstrap_snapshot_id = retry_bootstrap_result.snapshot_id;
+            result.bootstrap_action = derive_bootstrap_action(
+                &result.bootstrap_status,
+                result.bootstrap_snapshot_id.as_deref(),
+            );
 
             if result.bootstrap_status != "applied" {
                 let retry_status = result.bootstrap_status.clone();

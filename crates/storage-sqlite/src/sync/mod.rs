@@ -25,6 +25,7 @@ pub mod broker_ingest {
 pub(crate) use app_sync::flush_projected_outbox;
 pub use app_sync::{
     insert_outbox_event, AppSyncRepository, OutboxWriteRequest, SqliteSyncEngineDbPorts,
+    SyncLocalDataSummary, SyncTableRowCount,
 };
 pub use import_run::{ImportRunDB, ImportRunRepository};
 pub use platform::{Platform, PlatformDB, PlatformRepository};

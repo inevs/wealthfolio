@@ -459,6 +459,8 @@ pub fn run() {
             #[cfg(feature = "device-sync")]
             commands::device_sync::device_sync_engine_status,
             #[cfg(feature = "device-sync")]
+            commands::device_sync::device_sync_bootstrap_overwrite_check,
+            #[cfg(feature = "device-sync")]
             commands::device_sync::device_sync_reconcile_ready_state,
             #[cfg(feature = "device-sync")]
             commands::device_sync::device_sync_trigger_cycle,
