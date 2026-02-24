@@ -139,7 +139,7 @@ export function useSwingDashboard(ctx: AddonContext, period: PeriodType) {
           ? new PerformanceCalculator(closedTrades) // All trades for 'ALL' period
           : historicalCalculator; // Period-filtered for specific periods
 
-      const calendar = calendarCalculator.calculateCalendar(new Date().getFullYear(), fxRateMap);
+      const calendar = calendarCalculator.calculateCalendar(fxRateMap);
 
       // Calculate equity curve for the selected period (historical performance)
       const equityCurve = historicalCalculator.calculateEquityCurve(reportingCurrency, fxRateMap);
