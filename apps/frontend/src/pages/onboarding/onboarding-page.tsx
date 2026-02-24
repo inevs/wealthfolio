@@ -1,7 +1,7 @@
-import { useSettings } from "@/hooks/use-settings";
 import { usePlatform } from "@/hooks/use-platform";
-import { useSettingsContext } from "@/lib/settings-provider";
+import { useSettings } from "@/hooks/use-settings";
 import { WEALTHFOLIO_CONNECT_PORTAL_URL } from "@/lib/constants";
+import { useSettingsContext } from "@/lib/settings-provider";
 import { Button } from "@wealthfolio/ui/components/ui/button";
 import { Icons } from "@wealthfolio/ui/components/ui/icons";
 import { AnimatePresence, motion } from "motion/react";
