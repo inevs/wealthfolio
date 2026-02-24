@@ -24,6 +24,7 @@ export function convertToCSV<T extends Record<string, unknown>>(data: T[]): stri
       if (typeof value === "object") {
         return JSON.stringify(value);
       }
+      // eslint-disable-next-line @typescript-eslint/no-base-to-string
       return String(value);
     }),
   );
