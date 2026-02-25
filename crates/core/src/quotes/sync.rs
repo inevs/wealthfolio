@@ -38,7 +38,7 @@ use super::sync_state::{
     SyncMode, SyncPlanningInputs, SyncStateStore,
 };
 use super::types::{AssetId, Day, ProviderId};
-use crate::activities::ActivityRepositoryTrait;
+use crate::activities::{ActivityRepositoryTrait, ActivityUpsert};
 use crate::assets::{Asset, AssetKind, AssetRepositoryTrait, QuoteMode};
 use crate::errors::Error;
 use crate::errors::Result;
@@ -585,6 +585,100 @@ where
         }
     }
 
+    /// Fetch and upsert split activities for a single asset over the given date range.
+    ///
+    /// Non-fatal: any failure is logged as a warning and does not affect quote sync.
+    async fn sync_splits(&self, asset: &Asset, start: NaiveDate, end: NaiveDate) {
+        use crate::activities::compute_idempotency_key;
+
+        let start_dt = Utc.from_utc_datetime(&start.and_hms_opt(0, 0, 0).unwrap());
+        let end_dt = Utc.from_utc_datetime(&end.and_hms_opt(23, 59, 59).unwrap());
+
+        let client = self.client.read().await;
+        let splits = client.fetch_splits(asset, start_dt, end_dt).await;
+        drop(client);
+
+        if splits.is_empty() {
+            return;
+        }
+
+        let (account_ids, currencies) = match self
+            .activity_repo
+            .get_activity_accounts_and_currencies_by_asset_id(&asset.id)
+            .await
+        {
+            Ok(result) => result,
+            Err(e) => {
+                warn!(
+                    "Split sync: failed to get accounts for {}: {:?}",
+                    asset.id, e
+                );
+                return;
+            }
+        };
+
+        if account_ids.is_empty() {
+            return;
+        }
+
+        let mut upserts: Vec<ActivityUpsert> = Vec::new();
+        for split in &splits {
+            let split_dt = Utc.from_utc_datetime(&split.date.and_hms_opt(12, 0, 0).unwrap());
+            let currency = currencies.first().map(|s| s.as_str()).unwrap_or("USD");
+
+            for account_id in &account_ids {
+                let key = compute_idempotency_key(
+                    account_id,
+                    "SPLIT",
+                    &split_dt,
+                    Some(&asset.id),
+                    None,
+                    None,
+                    Some(split.ratio),
+                    currency,
+                    None,
+                    None,
+                );
+                upserts.push(ActivityUpsert {
+                    id: key.clone(),
+                    account_id: account_id.clone(),
+                    asset_id: Some(asset.id.clone()),
+                    activity_type: "SPLIT".to_string(),
+                    activity_date: split.date.to_string(),
+                    amount: Some(split.ratio),
+                    currency: currency.to_string(),
+                    idempotency_key: Some(key),
+                    quantity: None,
+                    unit_price: None,
+                    fee: None,
+                    notes: Some(format!("Auto-imported split ({})", split.ratio)),
+                    subtype: None,
+                    status: None,
+                    fx_rate: None,
+                    metadata: None,
+                    needs_review: None,
+                    source_system: Some("yahoo".to_string()),
+                    source_record_id: None,
+                    source_group_id: None,
+                    import_run_id: None,
+                });
+            }
+        }
+
+        if let Err(e) = self.activity_repo.bulk_upsert(upserts).await {
+            warn!(
+                "Split sync: failed to upsert splits for {}: {:?}",
+                asset.id, e
+            );
+        } else {
+            debug!(
+                "Split sync: upserted {} split activities for {}",
+                splits.len() * account_ids.len(),
+                asset.id
+            );
+        }
+    }
+
     /// Sync a single asset according to its sync plan.
     ///
     /// Uses per-asset locking (US-012) to prevent duplicate sync work when multiple
@@ -647,6 +741,10 @@ where
                     match self.quote_store.upsert_quotes(&quotes).await {
                         Ok(_) => {
                             debug!("Saved {} quotes for {}", quotes_count, asset.id);
+
+                            // Sync splits for this asset over the same date range.
+                            self.sync_splits(asset, plan.start_date, plan.end_date)
+                                .await;
 
                             // Update sync state after a successful sync attempt.
                             if let Err(e) = self.sync_state_store.update_after_sync(&asset.id).await
