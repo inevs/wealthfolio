@@ -26,6 +26,7 @@ use yahoo_finance_api as yahoo;
 use crate::errors::MarketDataError;
 use crate::models::{
     AssetProfile, Coverage, InstrumentKind, ProviderInstrument, Quote, QuoteContext, SearchResult,
+    SplitEvent,
 };
 use crate::provider::{MarketDataProvider, ProviderCapabilities, RateLimit};
 use crate::resolver::ResolverChain;
@@ -814,6 +815,55 @@ impl MarketDataProvider for YahooProvider {
             }
             Err(e) => Err(self.convert_yahoo_error(e, &symbol)),
         }
+    }
+
+    async fn get_splits(
+        &self,
+        _context: &QuoteContext,
+        instrument: ProviderInstrument,
+        start: DateTime<Utc>,
+        end: DateTime<Utc>,
+    ) -> Result<Vec<SplitEvent>, MarketDataError> {
+        let symbol = self.extract_symbol(&instrument)?;
+
+        if symbol.starts_with("CASH:") {
+            return Ok(vec![]);
+        }
+
+        let start_time = Self::chrono_to_offset_datetime(start);
+        let end_time = Self::chrono_to_offset_datetime(end);
+
+        // Use 3mo interval to minimize OHLCV data in the response (~200 bars max)
+        // while still returning all split events within the requested date range.
+        let response = self
+            .connector
+            .get_quote_history_interval(&symbol, start_time, end_time, "3mo")
+            .await
+            .map_err(|e| self.convert_yahoo_error(e, &symbol))?;
+
+        let splits = match response.splits() {
+            Ok(splits) => splits,
+            Err(yahoo::YahooError::NoQuotes) => return Ok(vec![]),
+            Err(e) => return Err(self.convert_yahoo_error(e, &symbol)),
+        };
+
+        let events = splits
+            .into_iter()
+            .filter_map(|s| {
+                let date = chrono::DateTime::from_timestamp(s.date, 0)?.date_naive();
+                if s.denominator == 0.0 {
+                    warn!(
+                        "Skipping split for {} on {} — zero denominator",
+                        symbol, date
+                    );
+                    return None;
+                }
+                let ratio = Decimal::from_f64(s.numerator / s.denominator)?;
+                Some(SplitEvent { date, ratio })
+            })
+            .collect();
+
+        Ok(events)
     }
 
     async fn search(&self, query: &str) -> Result<Vec<SearchResult>, MarketDataError> {
