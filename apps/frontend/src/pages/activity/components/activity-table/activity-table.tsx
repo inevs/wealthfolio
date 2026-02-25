@@ -24,6 +24,7 @@ import {
   isFeeActivity,
   isIncomeActivity,
   isSplitActivity,
+  formatSplitRatio,
 } from "@/lib/activity-utils";
 import { ActivityType, getExchangeDisplayName } from "@/lib/constants";
 import { ActivityDetails } from "@/lib/types";
@@ -259,7 +260,7 @@ export const ActivityTable = ({
             return <div className="pr-4 text-right">-</div>;
           }
           if (activityType === "SPLIT") {
-            return <div className="text-right">{Number(amount).toFixed(0)} : 1</div>;
+            return <div className="text-right">{formatSplitRatio(Number(amount))}</div>;
           }
           if (
             isCashActivity(activityType) ||
