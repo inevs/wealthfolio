@@ -602,7 +602,7 @@ where
             return;
         }
 
-        let (account_ids, currencies) = match self
+        let (account_ids, _) = match self
             .activity_repo
             .get_activity_accounts_and_currencies_by_asset_id(&asset.id)
             .await
@@ -621,10 +621,12 @@ where
             return;
         }
 
+        // Splits are asset-level events; use the asset's quote currency for a stable idempotency key.
+        let currency = asset.quote_ccy.as_str();
+
         let mut upserts: Vec<ActivityUpsert> = Vec::new();
         for split in &splits {
             let split_dt = Utc.from_utc_datetime(&split.date.and_hms_opt(12, 0, 0).unwrap());
-            let currency = currencies.first().map(|s| s.as_str()).unwrap_or("USD");
 
             for account_id in &account_ids {
                 let key = compute_idempotency_key(
